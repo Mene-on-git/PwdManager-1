@@ -3,11 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Configura MFA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h1>Configura MFA</h1>
-    <p>Scansiona questo codice QR con Google Authenticator:</p>
-    <img src="data:image/png;base64,{{ qr_b64 }}">
-    <p>Una volta configurato, <a href="{{ url_for('login') }}">torna al login</a>.</p>
+    <div class="mfa-setup-container">
+        <h1>Configura MFA</h1>
+        <p>Scansiona questo codice QR con Google Authenticator:</p>
+        <img src="data:image/png;base64,{{ qr_b64 }}">
+        <p>Una volta configurato, <a href="{{ url_for('login') }}">torna al login</a>.</p>
+    </div>
 </body>
 </html>
