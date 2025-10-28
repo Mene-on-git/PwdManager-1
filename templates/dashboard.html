@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vault Password</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <!-- CSRF token per fetch AJAX -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🔐 Il mio Vault</h1>
+            <form action="{{ url_for('logout') }}" method="get">
+                <button type="submit" class="btn btn-danger">Logout</button>
+            </form>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <section class="card">
+            <h2>Aggiungi una nuova password</h2>
+            <form method="POST" action="{{ url_for('add_password') }}" autocomplete="off">
+                {{ add_form.csrf_token }}
+                <div class="form-group">
+                    {{ add_form.site(placeholder="Sito (es. google.com)", class="form-control") }}
+                </div>
+                <div class="form-group">
+                    {{ add_form.username(placeholder="Username o Email", class="form-control") }}
+                </div>
+                <div class="form-group">
+                    {{ add_form.password(placeholder="Password", class="form-control") }}
+                </div>
+                <button type="submit" class="btn">Aggiungi</button>
+            </form>
+        </section>
+
+        <section class="password-generator">
+            <h3>Genera una password sicura</h3>
+            <div class="generator-box">
+                <input type="password" id="genpw" readonly class="form-control" placeholder="Clicca su Genera">
+                <div class="btn-group">
+                    <button id="btn-generate" class="btn">Genera</button>
+                    <button type="button" id="btn-toggle-gen" class="btn">
+                        <span id="toggle-gen-icon">👁️</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Vault delle Password</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Sito</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for id, site, username, _ in passwords %}
+                    <tr>
+                        <td>{{ site }}</td>
+                        <td>{{ username }}</td>
+                        <td>
+                            <span class="masked">••••••••</span>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-copy" data-id="{{ id }}">Copia</button>
+                            <form action="{{ url_for('delete_password', password_id=id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-danger"
+                                    onclick="return confirm('Sei sicuro di voler eliminare questa password?')">Elimina</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4">Nessuna password salvata.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

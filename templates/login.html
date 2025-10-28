@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login sicuro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="login-container card">
+        <h1 class="login-title">🔒 Password Vault</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" autocomplete="off" novalidate>
+            {{ form.csrf_token }}
+            <div class="form-group">
+                <label for="password">Master Password</label>
+                {{ form.password(class="form-control", placeholder="Inserisci la tua master password", autofocus=true) }}
+            </div>
+            <button type="submit" class="btn btn-block">Accedi</button>
+        </form>
+
+        {% if pw %}
+        <p class="info-text">Hai dimenticato la password? <a href="#" title="Non recuperabile per sicurezza">Non è recuperabile</a>.</p>
+        {% else %}
+        <p class="info-text">Nessuna master password trovata — la creerai ora.</p>
+        {% endif %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+</body>
+</html>
