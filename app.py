@@ -26,8 +26,9 @@ app = Flask(__name__)
 # Chiave segreta per sessioni e CSRF (se non esiste, ne genera una e la salva nel file .env)
 # Nota: qui si assegna SECRET_KEY con il valore di env o con un valore generato.
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
-with open(".env", "a") as f:
-    f.write(f"\nSECRET_KEY={app.config['SECRET_KEY']}")
+if not os.getenv("SECRET_KEY"):
+    with open(".env", "a") as f:
+        f.write(f"\nSECRET_KEY={app.config['SECRET_KEY']}")
 
 # Session lato server per non mettere segreti nel cookie firmato
 # Qui si configura Flask-Session per memorizzare le sessioni su filesystem.
@@ -65,6 +66,7 @@ def init_db():
     # Se ci sono vecchie versioni della tabella master senza la colonna 'salt', tenta di aggiungerla.
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
     # crea master con campo salt; se la tabella esiste senza salt, aggiunge la colonna
     c.execute("""CREATE TABLE IF NOT EXISTS master (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,6 +82,7 @@ def init_db():
         salt BLOB
     )""")
     conn.commit()
+    
     # migrazione: assicurarsi che la colonna 'salt' esista (compat con DB preesistenti)
     c.execute("PRAGMA table_info(master)")
     cols = [r[1] for r in c.fetchall()]
@@ -392,4 +395,4 @@ def reveal_password():
 
 if __name__ == "__main__":
     # in produzione disabilitare debug ed usare WSGI server
-    app.run(debug=True)
+    app.run(port=5000, debug=True) #quando si usa in produzione, debug deve essere False e quando farò il server mettere host='0.0.0.0'
