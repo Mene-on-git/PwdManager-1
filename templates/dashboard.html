@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vault Password</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <!-- CSRF token per fetch AJAX -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
+
 <body>
     <div class="container">
         <header class="header">
@@ -20,11 +22,11 @@
         </header>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
 
         <section class="card">
@@ -78,15 +80,17 @@
                         </td>
                         <td>
                             <button type="button" class="btn btn-sm btn-copy" data-id="{{ id }}">Copia</button>
-                            <form action="{{ url_for('delete_password', password_id=id) }}" method="post" style="display:inline;">
+                            <form action="{{ url_for('delete_password', password_id=id) }}" method="post"
+                                style="display:inline;" class="form-delete">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-danger"
-                                    onclick="return confirm('Sei sicuro di voler eliminare questa password?')">Elimina</button>
+                                <button type="submit" class="btn btn-sm btn-danger">Elimina</button>
                             </form>
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4">Nessuna password salvata.</td></tr>
+                    <tr>
+                        <td colspan="4">Nessuna password salvata.</td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -95,4 +99,5 @@
 
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
+
 </html>

@@ -203,3 +203,32 @@ h1, h2, h3 {
 .mfa-setup-container a:hover {
     text-decoration: underline;
 }
+
+/* Toast inline per conferma eliminazione - tema dark */
+.inline-toast {
+    background-color: #2a2a2a; /* stesso colore dei card e tabelle */
+    color: #e0e0e0;           /* testo chiaro */
+    border: 1px solid #555;   /* bordo soft */
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.9em;
+    margin-bottom: 10px;
+}
+
+.inline-toast .btn-danger {
+    background-color: #c62828;
+    color: #fff;
+}
+
+.inline-toast .btn-danger:hover {
+    background-color: #a81e1e;
+}
+
+.inline-toast .btn-secondary {
+    background-color: #555;
+    color: #e0e0e0;
+}
+
+.inline-toast .btn-secondary:hover {
+    background-color: #777;
+}
