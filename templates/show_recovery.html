@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salva Recovery Key</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+<div class="login-container card">
+    <h1 class="login-title">🔑 Nuova Recovery Key</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <p><strong>{{ recovery_key }}</strong></p>
+    <p>Salvala in modo sicuro prima di procedere.</p>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>
+            <input type="checkbox" name="confirm_save" value="1" required="required">
+            Ho salvato la recovery key
+        </label>
+        <br><br>
+        <button type="submit" class="btn btn-block">Conferma</button>
+    </form>
+</div>
+</body>
+</html>

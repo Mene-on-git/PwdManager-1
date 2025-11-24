@@ -25,13 +25,26 @@ h1, h2, h3 {
     color: #fff;
 }
 
-/* === Cards === */
-.card {
+/* === Cards & Containers === */
+.card,
+.login-container,
+.mfa-setup-container {
     background-color: #1e1e1e;
     border-radius: 10px;
-    padding: 20px;
+    padding: 25px;
     margin-bottom: 20px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+}
+
+.login-container,
+.mfa-setup-container {
+    max-width: 400px;
+    margin: 80px auto;
+}
+
+.mfa-setup-container {
+    max-width: fit-content;
+    text-align: center;
 }
 
 /* === Buttons === */
@@ -58,9 +71,23 @@ h1, h2, h3 {
     background-color: #a81e1e;
 }
 
+.btn-secondary {
+    background-color: #555;
+    color: #e0e0e0;
+}
+
+.btn-secondary:hover {
+    background-color: #777;
+}
+
 .btn-sm {
     padding: 5px 10px;
     font-size: 0.85em;
+}
+
+.btn-block {
+    width: 100%;
+    margin-top: 10px;
 }
 
 /* === Form === */
@@ -80,18 +107,56 @@ h1, h2, h3 {
     background-color: #222;
 }
 
-/* === Alerts === */
-.alert {
-    padding: 10px;
+.form-group {
+    margin-bottom: 15px;
+}
+
+/* === Alerts & Messages === */
+.alert,
+.inline-toast,
+.recovery-key-alert {
+    padding: 10px 15px;
     border-radius: 6px;
     margin-bottom: 15px;
     font-size: 0.9em;
 }
 
-.alert-success { background-color: #2e7d32; color: #fff; }
-.alert-danger { background-color: #b71c1c; color: #fff; }
-.alert-warning { background-color: #f57f17; color: #000; }
-.alert-info { background-color: #1565c0; color: #fff; }
+.alert-success,
+.recovery-key-alert {
+    background-color: #2e7d32;
+    color: #fff;
+    border-left: 4px solid #28a745;
+}
+
+.alert-danger { 
+    background-color: #b71c1c; 
+    color: #fff; 
+}
+
+.alert-warning,
+.warning-text {
+    background-color: #f57f17; 
+    color: #000; 
+}
+
+.alert-info { 
+    background-color: #1565c0; 
+    color: #fff; 
+}
+
+.inline-toast {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid #555;
+}
+
+.warning-text {
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #ffeaa7;
+    margin: 10px 0 0 0;
+    color: #856404;
+}
 
 /* === Tables === */
 .table {
@@ -111,7 +176,7 @@ h1, h2, h3 {
     color: #fff;
 }
 
-/* === Password Fields === */
+/* === Password Fields & Generator === */
 .password-field {
     display: flex;
     align-items: center;
@@ -138,24 +203,10 @@ h1, h2, h3 {
     gap: 6px;
 }
 
-/* === Login Page === */
-.login-container {
-    max-width: 400px;
-    margin: 80px auto;
-    background-color: #1e1e1e;
-    border-radius: 10px;
-    padding: 25px;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
-}
-
+/* === Login & Info Text === */
 .login-title {
     text-align: center;
     margin-bottom: 20px;
-}
-
-.btn-block {
-    width: 100%;
-    margin-top: 10px;
 }
 
 .info-text {
@@ -166,20 +217,6 @@ h1, h2, h3 {
 }
 
 /* === MFA Setup === */
-.mfa-setup-container {
-    max-width: fit-content;
-    margin: 80px auto;
-    background-color: #1e1e1e;
-    border-radius: 10px;
-    padding: 25px;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
-    text-align: center;
-}
-
-.mfa-setup-container h1 {
-    margin-bottom: 20px;
-}
-
 .mfa-setup-container p {
     margin: 15px 0;
     color: #aaa;
@@ -204,31 +241,77 @@ h1, h2, h3 {
     text-decoration: underline;
 }
 
-/* Toast inline per conferma eliminazione - tema dark */
-.inline-toast {
-    background-color: #2a2a2a; /* stesso colore dei card e tabelle */
-    color: #e0e0e0;           /* testo chiaro */
-    border: 1px solid #555;   /* bordo soft */
-    border-radius: 6px;
-    padding: 10px;
-    font-size: 0.9em;
+/* === Recovery Key Specific Styles === */
+.recovery-key-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 10px;
 }
 
-.inline-toast .btn-danger {
-    background-color: #c62828;
-    color: #fff;
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6c757d;
 }
 
-.inline-toast .btn-danger:hover {
-    background-color: #a81e1e;
+.close-btn:hover {
+    color: #495057;
 }
 
-.inline-toast .btn-secondary {
-    background-color: #555;
-    color: #e0e0e0;
+.recovery-key-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 15px 0;
+    padding: 12px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
 }
 
-.inline-toast .btn-secondary:hover {
-    background-color: #777;
+.recovery-key {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    word-break: break-all;
+    flex: 1;
+    color: #000;
+}
+
+.copy-btn {
+    background: none;
+    border: 1px solid #007bff;
+    color: #007bff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.copy-btn:hover {
+    background: #007bff;
+    color: white;
+}
+
+.recovery-key-actions {
+    margin: 20px 0;
+    padding: 15px;
+    background: #e9f7ef;
+    border-radius: 4px;
+    color: #000;
+}
+
+.confirmation-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    cursor: pointer;
+    color: #000;
+}
+
+.confirmation-checkbox input[type="checkbox"] {
+    margin: 0;
 }

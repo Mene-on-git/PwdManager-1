@@ -1,22 +1,30 @@
+# === LIBRERIE BASE ===
+import base64
 import os
+from datetime import timedelta
+from io import BytesIO
+import secrets
 import sqlite3
-from flask import Flask, render_template, redirect, url_for, request, session, flash, jsonify
-from flask_wtf import FlaskForm
-from wtforms import PasswordField, StringField, SubmitField
-from wtforms.validators import DataRequired
-from flask_wtf.csrf import CSRFProtect
-from dotenv import load_dotenv
+
+# === PACCHETTI TERZI ===
 from argon2 import PasswordHasher
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-import secrets
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from dotenv import load_dotenv
 import pyotp
 import qrcode
-from io import BytesIO
-import base64
-from datetime import timedelta
+
+# === MONDO FLASK ===
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_session import Session
+from flask_wtf import FlaskForm
+from flask_wtf.csrf import CSRFProtect
+
+# === FORM ===
+from wtforms import PasswordField, StringField, SubmitField
+from wtforms.validators import DataRequired
+
 
 # === CONFIGURAZIONE BASE ===
 load_dotenv()
@@ -61,7 +69,6 @@ class MFAForm(FlaskForm):
     token = StringField('Codice MFA', validators=[DataRequired()])
     submit = SubmitField('Verifica')
 
-# === RECOVERY KEY FORM ===
 class RecoveryForm(FlaskForm):
     recovery_key = StringField('Chiave di Recupero', validators=[DataRequired()])
     new_password = PasswordField('Nuova Master Password', validators=[DataRequired()])
@@ -135,33 +142,52 @@ def decrypt(ciphertext: bytes, nonce: bytes, salt: bytes, master_key) -> str:
 @app.route('/', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
+
+    # --- Controllo se esiste già la master password ---
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT password_hash, salt FROM master LIMIT 1")
     result = c.fetchone()
     conn.close()
 
+    # --- Se l'utente ha inviato il form ---
     if form.validate_on_submit():
         pw = form.password.data
+
+        # -------------------------------------------------------
+        #  PRIMO AVVIO: master password non esiste ancora
+        # -------------------------------------------------------
         if result is None:
-            # primo avvio: crea master password
+            # Genera hash e sale
             hash_pw = ph.hash(pw)
             master_salt = os.urandom(16)
+
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute("INSERT INTO master (password_hash, salt) VALUES (?, ?)", (hash_pw, master_salt))
-            conn.commit()
-            # === RECOVERY KEY ===
+
+            # --- Generazione Recovery Key ---
             recovery_key = secrets.token_urlsafe(32)
             c.execute("INSERT INTO recovery (key) VALUES (?)", (recovery_key,))
+
             conn.commit()
             conn.close()
-            flash(f"Master password creata! Salva questa Recovery Key: {recovery_key}", "success")
+
+            # Salva la recovery key in sessione per mostrarla nella pagina dedicata
+            session['recovery_key'] = recovery_key
+
+            # Deriva la chiave per l'apertura del vault
             derived_key = derive_key(pw, master_salt)
             session.permanent = True
             session['master_key'] = base64.b64encode(derived_key).decode()
             session['mfa_ok'] = False
-            return redirect(url_for('setup_mfa'))
+
+            # Redirect alla pagina che obbliga a salvare la recovery key
+            return redirect(url_for('first_setup_recovery'))
+
+        # -------------------------------------------------------
+        #  LOGIN NORMALE: master password già esiste
+        # -------------------------------------------------------
         else:
             try:
                 stored_hash, stored_salt = result[0], result[1]
@@ -170,12 +196,15 @@ def login():
                 flash("Master password errata.", "danger")
                 return redirect(url_for('login'))
 
+            # login riuscito
             derived_key = derive_key(pw, stored_salt)
             session.permanent = True
             session['master_key'] = base64.b64encode(derived_key).decode()
             session['mfa_ok'] = False
+
             return redirect(url_for('dashboard'))
 
+    # --- GET: carica la pagina di login ---
     return render_template('login.html', form=form, pw=result is not None)
 
 @app.route('/dashboard', methods=['GET', 'POST'])
@@ -324,9 +353,6 @@ def reveal_password():
 @app.route('/recovery', methods=['GET', 'POST'])
 def recovery():
     form = RecoveryForm()
-    show_key = session.pop('show_recovery', False)
-    recovery_key = session.pop('recovery_key', None)
-
     if form.validate_on_submit():
         rkey = form.recovery_key.data.strip()
         new_pw = form.new_password.data
@@ -341,20 +367,19 @@ def recovery():
             conn.close()
             return redirect(url_for('recovery'))
 
-        # aggiorna master password
+        # Aggiorna master password
         master_salt = os.urandom(16)
         hash_pw = ph.hash(new_pw)
         c.execute("UPDATE master SET password_hash=?, salt=? WHERE id=1", (hash_pw, master_salt))
 
-        # genera nuova Recovery Key
+        # Genera nuova Recovery Key
         new_recovery = secrets.token_urlsafe(32)
         c.execute("UPDATE recovery SET key=? WHERE id=1", (new_recovery,))
 
-        # decripta e ricripta vault con nuova chiave
+        # Decripta e ricripta vault
         c.execute("SELECT id, password, nonce, salt FROM vault")
         vault_rows = c.fetchall()
-
-        derived_old_key = derive_key(new_pw, master_salt)  # derivata dalla nuova password
+        derived_old_key = derive_key(new_pw, master_salt)
         for vid, ciphertext, nonce, salt in vault_rows:
             plaintext = decrypt(ciphertext, nonce, salt, derived_old_key)
             new_ct, new_nonce, new_salt = encrypt(plaintext, derived_old_key)
@@ -363,11 +388,47 @@ def recovery():
         conn.commit()
         conn.close()
 
-        flash(f"Password reimpostata! Salva la nuova Recovery Key: {new_recovery}", "success")
+        # Salva in sessione per mostrarla nella nuova pagina
+        session['recovery_key'] = new_recovery
+        return redirect(url_for('show_recovery'))
+
+    return render_template('recovery.html', form=form)
+
+@app.route('/show_recovery', methods=['GET', 'POST'])
+def show_recovery():
+    recovery_key = session.get('recovery_key')
+    if not recovery_key:
+        flash("Nessuna recovery key disponibile.", "warning")
         return redirect(url_for('login'))
 
-    return render_template('recovery.html', form=form, show_key=show_key, recovery_key=recovery_key)
+    if request.method == 'POST':
+        if request.form.get('confirm_save'):
+            session.pop('recovery_key', None)
+            flash("Recovery key salvata correttamente!", "success")
+            return redirect(url_for('login'))
+        else:
+            flash("Devi confermare di aver salvato la recovery key.", "danger")
 
+    return render_template('show_recovery.html', recovery_key=recovery_key)
+
+@app.route('/first_setup_recovery', methods=['GET', 'POST'])
+def first_setup_recovery():
+    recovery_key = session.get('recovery_key')
+
+    if not recovery_key:
+        flash("Nessuna recovery key disponibile.", "warning")
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        if request.form.get('confirm_save'):
+            # rimuoviamo la key dalla sessione
+            session.pop('recovery_key', None)
+            flash("Recovery key salvata correttamente!", "success")
+            return redirect(url_for('setup_mfa'))
+        else:
+            flash("Devi confermare di aver salvato la recovery key.", "danger")
+
+    return render_template('first_setup_recovery.html', recovery_key=recovery_key)
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
