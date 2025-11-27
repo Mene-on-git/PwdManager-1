@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
-
+    
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
@@ -8,7 +8,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vault Password</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <!-- CSRF token per fetch AJAX -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 
@@ -71,6 +70,18 @@
                     </tr>
                 </thead>
                 <tbody>
+                    <div style="margin-top: 20px; text-align: right;">
+                        <a href="/import" class="btn btn-primary">
+                            📥 Importa password
+                        </a>
+                    </div>
+                    {%  if passwords %}
+                    <div style="margin-top: 20px; text-align: right;">
+                        <a href="/export" class="btn btn-primary">
+                            📤 Esporta password
+                        </a>
+                    </div>
+                    {% endif %}
                     {% for id, site, username, _ in passwords %}
                     <tr>
                         <td>{{ site }}</td>
@@ -87,16 +98,16 @@
                             </form>
                         </td>
                     </tr>
-                    {% else %}
+                    {% endfor %}
+                    {% if not passwords %}
                     <tr>
                         <td colspan="4">Nessuna password salvata.</td>
                     </tr>
-                    {% endfor %}
+                    {% endif %}
                 </tbody>
             </table>
         </section>
     </div>
-
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 

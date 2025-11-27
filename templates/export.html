@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Esporta Password</title>
+</head>
+
+<body>
+
+<div class="container" style="margin-top:40px; max-width:400px;">
+    <section class="card">
+    <h2>Esporta Password</h2>
+    <p>Inserisci la tua <b>recovery key</b> per creare un file CSV crittografato.</p>
+
+    <form method="POST" action="/export">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="password"
+               name="recovery_key"
+               class="form-control"
+               placeholder="Recovery key"
+               required>
+        <button type="submit" class="btn btn-primary" style="margin-top:15px; width:100%;">
+            🔐 Esporta CSV Crittografato
+        </button>
+    </form>
+    
+    <form action="{{ url_for('dashboard') }}" method="get">
+        <button type="submit" class="btn btn-secondary" style="margin-top:15px; width:100%;">⬅️ Indietro</button>
+    </form>
+
+    {% for msg in get_flashed_messages() %}
+    <div class="alert alert-danger" style="margin-top:15px;">
+        {{ msg }}
+    </div>
+    {% endfor %}
+    </section>
+</div>
+
+</body>
+</html>

@@ -1,26 +1,29 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <title>Verifica MFA</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
+
 <body>
-<div class="login-container card">
-    <h1 class="login-title">🔐 Verifica MFA</h1>
-    {% with messages = get_flashed_messages(with_categories=true) %}
+    <div class="login-container card">
+        <h1 class="login-title">🔐 Verifica MFA</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
+        <div class="alert alert-{{ category }}">{{ message }}</div>
         {% endfor %}
-    {% endwith %}
-    <form method="POST" autocomplete="off">
-        {{ form.csrf_token }}
-        <div class="form-group">
-            <label for="token">Inserisci codice MFA (Google Authenticator)</label>
-            {{ form.token(class="form-control", autofocus=true) }}
-        </div>
-        <button type="submit" class="btn btn-block">Verifica</button>
-    </form>
-</div>
+        {% endwith %}
+        <form method="POST" autocomplete="off">
+            {{ form.csrf_token }}
+            <div class="form-group">
+                <label for="token">Inserisci codice MFA (Google Authenticator)</label>
+                {{ form.token(class="form-control", autofocus=true) }}
+            </div>
+            <button type="submit" class="btn btn-block">Verifica</button>
+        </form>
+    </div>
 </body>
+
 </html>

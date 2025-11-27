@@ -1,0 +1,34 @@
+<html lang="it">
+<!DOCTYPE html>
+
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+
+<body>
+    <div class="container mt-4">
+        <h2>Importa Password da CSV</h2>
+
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="mb-3">
+                <label for="recovery_key" class="form-label">Recovery Key</label>
+                <input type="text" id="recovery_key" name="recovery_key" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="file" class="form-label">File CSV</label>
+                <input type="file" id="file" name="file" accept=".csv" class="form-control" required>
+            </div>
+
+            <button type="submit" class="btn btn-success" style="width:100%">Importa</button>
+        </form>
+
+        <form action="{{ url_for('dashboard') }}" method="get">
+            <button type="submit" class="btn btn-secondary" style="margin-top:15px; width:100%;">⬅️ Indietro</button>
+        </form>
+    </div>
+</body>
+
+</html>
