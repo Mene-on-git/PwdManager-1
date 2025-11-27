@@ -1,22 +1,22 @@
 # === LIBRERIE BASE ===
-import base64
-import os
+import base64           # Operazioni base64
+import os               # File system, variabili ambiente
 from datetime import timedelta
 from io import BytesIO
 import io
-import secrets
-import sqlite3
-import csv
-import hmac
+import secrets          # Token sicuri (usato per SECRET_KEY)
+import sqlite3          # DB locale
+import csv              # Export CSV
+import hmac             # Confronto sicuro (se servisse)
 
 # === PACCHETTI TERZI ===
-from argon2 import PasswordHasher
+from argon2 import PasswordHasher              # Hashing master password
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from dotenv import load_dotenv
-import pyotp
-import qrcode
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM   # AES-GCM (crittografia autenticata)
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC # Derivazione chiavi PBKDF2
+from dotenv import load_dotenv                 # Lettura .env
+import pyotp                                   # MFA TOTP
+import qrcode                                  # Generazione QR MFA
 
 # === MONDO FLASK ===
 from flask import (
@@ -28,41 +28,48 @@ from flask import (
     request,
     session,
     url_for,
-    Response,
     send_file,
 )
-from flask_session import Session
-from flask_wtf import FlaskForm
-from flask_wtf.csrf import CSRFProtect
-from functools import wraps
+from flask_session import Session              # Sessioni salvate su filesystem
+from flask_wtf import FlaskForm                # Gestione form sicuri
+from flask_wtf.csrf import CSRFProtect         # Protezione CSRF
+from functools import wraps                    # Per creare decorator sicuri
 
 # === FORM ===
 from wtforms import PasswordField, StringField, SubmitField
-from wtforms.validators import DataRequired
+from wtforms.validators import DataRequired     # Validazione base
 
 
 # === CONFIGURAZIONE BASE ===
 load_dotenv()
 app = Flask(__name__)
 
+# Genera o carica la SECRET_KEY per Flask
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
 if not os.getenv("SECRET_KEY"):
+    # Se mancava, la salva nel .env
     with open(".env", "a") as f:
         f.write(f"\nSECRET_KEY={app.config['SECRET_KEY']}")
 
+# Sessioni lato server (flask_session)
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["SESSION_FILE_DIR"] = os.path.join(os.getcwd(), "flask_session")
 os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
 app.config["SESSION_PERMANENT"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
-app.config["SESSION_COOKIE_SECURE"] = True
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# Cookie più sicuri
+app.config["SESSION_COOKIE_SECURE"] = True     # solo HTTPS
+app.config["SESSION_COOKIE_HTTPONLY"] = True   # non accessibile da JS
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # anti-CSRF
 
 Session(app)
 csrf = CSRFProtect(app)
+
+# Argon2 per hashing password master
 ph = PasswordHasher()
 
+# Segreto MFA TOTP (creato una sola volta)
 TOTP_SECRET = os.getenv("TOTP_SECRET")
 if not TOTP_SECRET:
     TOTP_SECRET = pyotp.random_base32()
@@ -71,9 +78,8 @@ if not TOTP_SECRET:
 
 
 # === HELPERS CRYPTO / KDF ===
-def kdf_pbkdf2(
-    password: bytes, salt: bytes, length: int = 32, iterations: int = 390000
-) -> bytes:
+def kdf_pbkdf2(password: bytes, salt: bytes, length: int = 32, iterations: int = 390000) -> bytes:
+    """Deriva una chiave sicura da password + salt usando PBKDF2-HMAC-SHA256."""
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=length,
@@ -82,17 +88,19 @@ def kdf_pbkdf2(
     )
     return kdf.derive(password)
 
-# Deriva una chiave di crittografia dalla master password e dal sale
+
 def derive_key(password, salt: bytes) -> bytes:
+    """Accetta password (str o bytes) e restituisce una chiave a 32 byte."""
     if isinstance(password, str):
         password_bytes = password.encode()
     else:
         password_bytes = password
     return kdf_pbkdf2(password_bytes, salt, length=32, iterations=390000)
 
-# == HELPERS ENCRYPTION / DECRYPTION (AES-GCM) ===
+
+# === ENCRYPT / DECRYPT (AES-GCM) ===
 def encrypt_bytes(plaintext: bytes, key: bytes) -> bytes:
-    """AES-GCM encrypt: ritorna nonce + ciphertext"""
+    """Cifra dati raw con AES-GCM. Restituisce nonce + ciphertext."""
     nonce = os.urandom(12)
     aesgcm = AESGCM(key)
     ct = aesgcm.encrypt(nonce, plaintext, None)
@@ -100,14 +108,14 @@ def encrypt_bytes(plaintext: bytes, key: bytes) -> bytes:
 
 
 def decrypt_bytes(blob: bytes, key: bytes) -> bytes:
-    """Inverse di encrypt_bytes: blob = nonce + ciphertext"""
+    """Decifra blob = nonce + ciphertext AES-GCM."""
     try:
         nonce = blob[:12]
         ct = blob[12:]
         aesgcm = AESGCM(key)
-        pt = aesgcm.decrypt(nonce, ct, None)
-        return pt
+        return aesgcm.decrypt(nonce, ct, None)
     except Exception:
+        # Tag GCM invalido → chiave sbagliata o dati corrotti
         raise
 
 
@@ -140,9 +148,11 @@ DB_PATH = "passwords.db"
 
 
 def init_db():
+    """Crea tabelle se non presenti e applica piccole migrazioni."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # master table (leave mostly as-is)
+
+    # Tabella master (hash + salt)
     c.execute(
         """CREATE TABLE IF NOT EXISTS master (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,7 +160,8 @@ def init_db():
         salt BLOB
     )"""
     )
-    # vault table
+
+    # Tabella vault
     c.execute(
         """CREATE TABLE IF NOT EXISTS vault (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,7 +172,8 @@ def init_db():
         salt BLOB
     )"""
     )
-    # recovery: extend columns for salt, key_hash, backup (encrypted master_key)
+
+    # Tabella recovery (versione vecchia aveva solo 'key')
     c.execute(
         """CREATE TABLE IF NOT EXISTS recovery (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -170,49 +182,43 @@ def init_db():
     )
     conn.commit()
 
-    # Migrate recovery table: if missing columns, add them.
+    # Migrazione colonne recovery
     c.execute("PRAGMA table_info(recovery)")
     rec_cols = [r[1] for r in c.fetchall()]
-    # If old 'key' exists and new columns not present, we will add new columns and migrate if possible.
-    if "salt" not in rec_cols:
-        try:
-            c.execute("ALTER TABLE recovery ADD COLUMN salt BLOB")
-        except Exception:
-            pass
-    if "key_hash" not in rec_cols:
-        try:
-            c.execute("ALTER TABLE recovery ADD COLUMN key_hash BLOB")
-        except Exception:
-            pass
-    if "backup" not in rec_cols:
-        try:
-            c.execute("ALTER TABLE recovery ADD COLUMN backup BLOB")
-        except Exception:
-            pass
 
-    # ensure master table has salt column (you had code for this earlier)
+    if "salt" not in rec_cols:
+        try: c.execute("ALTER TABLE recovery ADD COLUMN salt BLOB")
+        except: pass
+
+    if "key_hash" not in rec_cols:
+        try: c.execute("ALTER TABLE recovery ADD COLUMN key_hash BLOB")
+        except: pass
+
+    if "backup" not in rec_cols:
+        try: c.execute("ALTER TABLE recovery ADD COLUMN backup BLOB")
+        except: pass
+
+    # Migrazione master salt (se mancava)
     c.execute("PRAGMA table_info(master)")
     cols = [r[1] for r in c.fetchall()]
     if "salt" not in cols:
         try:
             c.execute("ALTER TABLE master ADD COLUMN salt BLOB")
             conn.commit()
-        except Exception:
+        except:
             pass
 
     conn.commit()
     conn.close()
 
 
+# Inizializza il database all'avvio
 init_db()
 
 
-# === CRITTOGRAFIA STORAGE (compatibile con il tuo codice originale) ===
+# === CRITTOGRAFIA STORAGE PASSWORD ===
 def encrypt(password: str, master_key) -> tuple:
-    """
-    Encrypt a single password string with a derived key.
-    Returns (ciphertext, nonce, salt) matching your previous schema.
-    """
+    """Cifra una password del vault. Restituisce (ciphertext, nonce, salt)."""
     salt = os.urandom(16)
     nonce = os.urandom(12)
     key = derive_key(master_key, salt)
@@ -222,6 +228,7 @@ def encrypt(password: str, master_key) -> tuple:
 
 
 def decrypt(ciphertext: bytes, nonce: bytes, salt: bytes, master_key) -> str:
+    """Decifra una password dal vault. Restituisce '[DECRYPT FAILED]' se la chiave è errata."""
     try:
         key = derive_key(master_key, salt)
         aesgcm = AESGCM(key)
@@ -232,14 +239,19 @@ def decrypt(ciphertext: bytes, nonce: bytes, salt: bytes, master_key) -> str:
 
 # === DECORATOR login_required ===
 def login_required(f):
+    """Protegge una route richiedendo:
+    - master_key in sessione
+    - MFA completato
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Controllo master key
+
+        # Check master key
         if "master_key" not in session:
             flash("Sessione scaduta. Effettua nuovamente il login.", "warning")
             return redirect(url_for("login"))
 
-        # Controllo MFA
+        # Check MFA
         if not session.get("mfa_ok"):
             flash("Devi completare l'autenticazione MFA.", "warning")
             return redirect(url_for("mfa"))
@@ -249,7 +261,15 @@ def login_required(f):
     return decorated_function
 
 
+
 # === ROTTE ===
+
+# =====================================================================================
+# ROUTE LOGIN
+# - Gestisce sia il primo avvio (creazione master password + recovery key)
+# - Sia il login normale quando esiste già la master password
+# - In caso di primo avvio: crea hash PW, salva sale, genera recovery key e backup
+# =====================================================================================
 @app.route("/", methods=["GET", "POST"])
 def login():
     form = LoginForm()
@@ -265,9 +285,18 @@ def login():
     if form.validate_on_submit():
         pw = form.password.data
 
-        # -------------------------------------------------------
-        #  PRIMO AVVIO: master password non esiste ancora
-        # -------------------------------------------------------
+        # -------------------------------------------------------------------------------------
+        # PRIMO AVVIO DEL SISTEMA (non esiste ancora una master password nel DB)
+        # Operazioni eseguite:
+        # 1. Crea hash Argon2 della master password
+        # 2. Genera sale per derivazione master key
+        # 3. Deriva la master key (32 bytes) da password + sale
+        # 4. Genera recovery key in chiaro (solo sessione, mai salvata in DB)
+        # 5. Deriva chiave PBKDF2 da recovery key → salvata come hash per verifica futura
+        # 6. Cifra un backup della master key usando una chiave ricavata dalla recovery key
+        # 7. Salva recovery_salt + hash + backup nel DB
+        # 8. Salva recovery key (solo in sessione) per mostrarla e costringere utente a salvarla
+        # -------------------------------------------------------------------------------------
         if result is None:
             # Genera hash e sale
             hash_pw = ph.hash(pw)
@@ -283,27 +312,28 @@ def login():
             # --- Generazione Recovery Key (plaintext temporaneo) ---
             recovery_key = secrets.token_urlsafe(32)
 
-            # Compute recovery salt + hash for verification, and also store a backup of the derived master_key encrypted with recovery key
+            # --- in italiano: calcola sale e hash per la verifica, e memorizza anche un backup della master_key derivata cifrata con la recovery key ---
             recovery_salt = os.urandom(16)
-            # compute hash for later verification (PBKDF2)
+
+            # --- calcola hash per la verifica successiva (PBKDF2) ---
             recovery_key_hash = kdf_pbkdf2(
                 recovery_key.encode(), recovery_salt, length=32, iterations=200000
             )
 
-            # Deriva la chiave per l'apertura del vault (master_key raw bytes)
+            # --- Deriva la chiave per l'apertura del vault (master_key raw bytes) ---
             derived_key = derive_key(pw, master_salt)  # 32 bytes
             session.permanent = True
             session["master_key"] = base64.b64encode(derived_key).decode()
             session["mfa_ok"] = False
 
-            # Backup del master key cifrato con una chiave derivata dalla recovery key
+            # --- Backup del master key cifrato con una chiave derivata dalla recovery key ---
             recovery_enc_key = kdf_pbkdf2(
                 recovery_key.encode(), recovery_salt, length=32, iterations=200000
             )
             backup_blob = encrypt_bytes(derived_key, recovery_enc_key)  # nonce + ct
 
-            # Inserisci entry recovery (salta inserimento plaintext 'key' per compatibilità: aggiorniamo le colonne)
-            # Se esiste già una row nella tabella recovery, facciamo UPDATE, altrimenti INSERT
+            # --- Inserisci entry recovery (salta inserimento plaintext 'key' per compatibilità: aggiorniamo le colonne) ---
+            # --- Se esiste già una row nella tabella recovery, facciamo UPDATE, altrimenti INSERT ---
             c.execute("SELECT id FROM recovery LIMIT 1")
             r = c.fetchone()
             if r:
@@ -326,15 +356,19 @@ def login():
             conn.commit()
             conn.close()
 
-            # Salva la recovery key in sessione per mostrarla nella pagina dedicata
+            # --- Salva la recovery key in sessione per mostrarla nella pagina dedicata ---
             session["recovery_key"] = recovery_key
 
-            # Redirect alla pagina che obbliga a salvare la recovery key
+            # --- Redirect alla pagina che obbliga a salvare la recovery key ---
             return redirect(url_for("first_setup_recovery"))
 
-        # -------------------------------------------------------
-        #  LOGIN NORMALE: master password già esiste
-        # -------------------------------------------------------
+        # -------------------------------------------------------------------------------------
+        # LOGIN NORMALE
+        # - Recupera hash Argon2 e sale
+        # - Verifica master password
+        # - Deriva master key (usata per cifrare/decifrare il vault)
+        # - Imposta sessione e reindirizza a dashboard
+        # -------------------------------------------------------------------------------------
         else:
             try:
                 stored_hash, stored_salt = result[0], result[1]
@@ -343,7 +377,7 @@ def login():
                 flash("Master password errata.", "danger")
                 return redirect(url_for("login"))
 
-            # login riuscito
+            # --- login riuscito ---
             derived_key = derive_key(pw, stored_salt)
             session.permanent = True
             session["master_key"] = base64.b64encode(derived_key).decode()
@@ -354,7 +388,12 @@ def login():
     # --- GET: carica la pagina di login ---
     return render_template("login.html", form=form, pw=result is not None)
 
-
+# =====================================================================================
+# DASHBOARD
+# - Mostra tutte le password decriptate dall'utente
+# - Permette l'inserimento di nuove password
+# - Per ogni entry, la password viene decriptata usando la master_key in sessione
+# =====================================================================================
 @app.route("/dashboard", methods=["GET", "POST"])
 @login_required
 def dashboard():
@@ -386,7 +425,13 @@ def dashboard():
 
     return render_template("dashboard.html", add_form=form, passwords=decrypted)
 
-
+# =====================================================================================
+# ADD PASSWORD
+# - Aggiunge una nuova password al vault.
+# - Ogni password viene cifrata con:
+#       AES-GCM(secret = derived master key)
+#       + sale e nonce unici per ogni entry.
+# =====================================================================================
 @app.route("/add_password", methods=["POST"])
 @login_required
 def add_password():
@@ -415,7 +460,10 @@ def add_password():
 
     return redirect(url_for("dashboard"))
 
-
+# =====================================================================================
+# DELETE PASSWORD
+# - Rimuove una password dal vault tramite ID
+# =====================================================================================
 @app.route("/delete/<int:password_id>", methods=["POST"])
 @login_required
 def delete_password(password_id):
@@ -445,7 +493,11 @@ def generate_password():
     pw = "".join(secrets.choice(chars) for _ in range(20))
     return pw
 
-
+# =====================================================================================
+# SETUP MFA
+# - Genera QR Code TOTP
+# - L’utente deve scansionarlo con Google Authenticator / Authy
+# =====================================================================================
 @app.route("/setup_mfa")
 def setup_mfa():
     if "master_key" not in session:
@@ -458,7 +510,11 @@ def setup_mfa():
     qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     return render_template("setup_mfa.html", qr_b64=qr_b64)
 
-
+# =====================================================================================
+# MFA (2nd factor)
+# - Verifica codice TOTP generato dal client
+# - Alla riuscita, abilita session["mfa_ok"]
+# =====================================================================================
 @app.route("/mfa", methods=["GET", "POST"])
 def mfa():
     if "master_key" not in session:
@@ -476,7 +532,12 @@ def mfa():
             flash("Codice MFA non valido.", "danger")
     return render_template("mfa.html", form=form)
 
-
+# =====================================================================================
+# REVEAL PASSWORD (AJAX)
+# - Richiede MFA valido
+# - Decripta la password richiesta usando master_key in sessione
+# - Restituisce JSON con la password in chiaro
+# =====================================================================================
 @app.route("/reveal_password", methods=["POST"])
 @login_required
 def reveal_password():
@@ -507,6 +568,15 @@ def reveal_password():
 
 
 # === ROUTE RECOVERY KEY ===
+
+# =====================================================================================
+# RECOVERY
+# - Verifica la recovery key tramite PBKDF2-HMAC (hmac.compare_digest)
+# - Usa la recovery key per decifrare il backup del master_key originale
+# - Consente all'utente di reinserire una nuova master password
+# - Re-deriva master_key e ricifra tutte le password del vault
+# - Genera una NUOVA recovery key e aggiorna hash + salt + backup nel DB
+# =====================================================================================
 @app.route("/recovery", methods=["GET", "POST"])
 def recovery():
     form = RecoveryForm()
@@ -634,7 +704,11 @@ def recovery():
 
     return render_template("recovery.html", form=form)
 
-
+# =====================================================================================
+# SHOW RECOVERY
+# - Mostra la recovery key in chiaro (ESCLUSIVAMENTE da sessione)
+# - Richiede conferma utente prima di procedere
+# =====================================================================================
 @app.route("/show_recovery", methods=["GET", "POST"])
 def show_recovery():
     recovery_key = session.get("recovery_key")
@@ -652,7 +726,11 @@ def show_recovery():
 
     return render_template("show_recovery.html", recovery_key=recovery_key)
 
-
+# =====================================================================================
+# FIRST SETUP RECOVERY
+# - Identico a show_recovery ma obbligatorio al primo avvio
+# - Utente deve salvare la recovery key prima di procedere al setup MFA
+# =====================================================================================
 @app.route("/first_setup_recovery", methods=["GET", "POST"])
 def first_setup_recovery():
     recovery_key = session.get("recovery_key")
@@ -674,6 +752,15 @@ def first_setup_recovery():
 
 
 # === ROUTE EXPORT PASSWORDS ===
+
+# =====================================================================================
+# EXPORT PASSWORDS
+# - Decripta tutto il vault con master_key
+# - Genera CSV (site, username, password)
+# - Deriva chiave da recovery key dell’utente
+# - Cifra il CSV in AES-GCM (encrypt_bytes)
+# - Restituisce file binario nonce+ciphertext
+# =====================================================================================
 @app.route("/export", methods=["GET"])
 @login_required
 def export_page():
@@ -764,6 +851,13 @@ def export_passwords():
 
 
 # === ROUTE IMPORT PASSWORDS ===
+
+# =====================================================================================
+# IMPORT PASSWORDS
+# - Verifica recovery key tramite PBKDF2
+# - Decifra il file binario importato tramite AES-GCM
+# - Importa righe CSV all’interno del vault, ricifrandole con master_key corrente
+# =====================================================================================
 @app.route("/import", methods=["GET"])
 @login_required
 def import_page():
